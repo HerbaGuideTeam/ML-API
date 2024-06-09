@@ -111,3 +111,4 @@ dmypy.json
 
 # Pyright type checker
 .pyright/
+.herbaguiderev2.h5

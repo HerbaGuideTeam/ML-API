@@ -1,7 +1,12 @@
-tensorflow
-fastapi
 uvicorn
-python-multipart
-pillow
-matplotlib
+tensorflow
 numpy
+firebase-admin
+pillow
+fastapi
+google-cloud-firestore
+google-cloud-secret-manager
+sqlalchemy
+google-auth
+cloud-sql-python-connector[pymysql]
+pymysql

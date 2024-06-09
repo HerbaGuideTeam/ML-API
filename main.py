@@ -2,74 +2,191 @@ import os
 import uvicorn
 import tensorflow as tf
 import numpy as np
+import firebase_admin
+import json
 from io import BytesIO
 from PIL import Image
-from fastapi import FastAPI, Response, UploadFile, File, HTTPException, status
+from fastapi import FastAPI, Response, UploadFile, File, HTTPException, status, Depends, Request
 from fastapi.responses import JSONResponse
+from google.cloud import firestore, secretmanager
+from connect import create_connection_pool
+from sqlalchemy import text
+from google.oauth2 import service_account
+from firebase_admin import auth, credentials
+from datetime import datetime 
 
-# Load the model
-model = tf.keras.models.load_model('./model.h5')
+def access_secret_version(project_id, secret_id, version_id):
+    client = secretmanager.SecretManagerServiceClient()
+    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+    response = client.access_secret_version(request={"name": name})
+    payload = response.payload.data.decode("UTF-8")
+    return json.loads(payload)
+
+model = tf.keras.models.load_model('./HerbaGuideRev2.h5')
+
 app = FastAPI(title="ML Try FastAPI")
 
-# Define CIFAR-10 class names
-class_names = [
-    'airplane', 'automobile', 'bird', 'cat', 'deer',
-    'dog', 'frog', 'horse', 'ship', 'truck'
-]
+pool = create_connection_pool()
 
-# In-memory storage for prediction history
-prediction_history = []
+
+class_names = ['Badabotan', 'Bakung', 'Belimbing Wuluh', 'Bunga Tasbih', 'Kumis Kucing', 'Lidah Buaya', 'Mimba',
+               'Sambiloto', 'Sereh Dapur', 'Sirih']
+
+if not firebase_admin._apps:
+    firebaseSa = access_secret_version('c241-ps193', 'firebase_sa','1')
+    cred = credentials.Certificate(firebaseSa)
+    firebase_admin.initialize_app(cred)
+
+# Initialize Firestore client
+db = firestore.Client()
 
 # Image processing function
 def process_image(image_bytes):
     image = Image.open(BytesIO(image_bytes))
     if image.mode != 'RGB':
         image = image.convert('RGB')
-    image = image.resize((32, 32))  # Resize the image as per the model requirements
-    image = np.array(image) / 255.0  # Normalize pixel values
+    image = image.resize((224, 224))
+    image = np.array(image) / 255.0 
     return image
 
-# Health check endpoint
 @app.get("/")
 def index():
     return Response(content="API WORKING", status_code=200)
 
+# Function to fetch product details
+def fetch_product_details(nama):
+    with pool.connect() as conn:
+        sql_statement = text(
+            "SELECT th.nama, th.deskripsi, th.photo_url, pr.penyakit, pr.resep "
+            "FROM tanaman_herbal th "
+            "JOIN penyakit_resep pr ON th.id = pr.tanaman_herbal_id "
+            "WHERE th.nama = :nama;"
+        )
+        sql_statement = sql_statement.bindparams(nama=nama)
+        result = conn.execute(sql_statement)
+        query_results = result.fetchall()
+
+    # Handle missing product details
+    if not query_results:
+        return []
+
+    formatted_results = {
+        'nama': query_results[0][0],
+        'deskripsi': query_results[0][1],
+        'photo_url': query_results[0][2],
+        'mengobati_apa': []
+    }
+
+    for row in query_results:
+        formatted_results['mengobati_apa'].append({
+            'penyakit': row[3],
+            'resep': [row[4]] 
+        })
+
+  
+    penyakit_dict = {}
+    for item in formatted_results['mengobati_apa']:
+        if item['penyakit'] not in penyakit_dict:
+            penyakit_dict[item['penyakit']] = {'penyakit': item['penyakit'], 'resep': []}
+        penyakit_dict[item['penyakit']]['resep'].extend(item['resep'])
+
+    formatted_results['mengobati_apa'] = list(penyakit_dict.values())
+
+    return formatted_results
+
 # Endpoint for image prediction
 @app.post("/predict_image")
-async def predict_image(photo: UploadFile = File(...)):
+async def predict_image(request: Request, photo: UploadFile = File(...)):
     try:
+   
+        jwt = request.headers.get('Authorization')
+        if not jwt:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token missing")
+
+        user = auth.verify_id_token(jwt)
+        user_id = user['user_id']
+
         if photo.content_type not in ["image/jpeg", "image/png"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is Not an Image")
-        
+
         contents = await photo.read()
         processed_image = process_image(contents)
         processed_image = np.expand_dims(processed_image, axis=0)
 
         prediction = model.predict(processed_image)
+
         predicted_class = np.argmax(prediction)
         predicted_class_name = class_names[predicted_class]
-        
-        response = {
-            'prediction': {
-                'class': predicted_class_name,
-                'confidence': float(np.max(prediction))
-            }
+        product_details = fetch_product_details(predicted_class_name)
+
+        if not product_details:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product details not found")
+
+        new_prediction = {
+            'tanaman_herbal': product_details,
+            'confidence': float(np.max(prediction)),
+            'created_at': datetime.utcnow().isoformat() 
         }
 
-        # Save prediction to history
-        prediction_history.append(response)
+   
+        user_doc_ref = db.collection('user_prediction_history').document(user_id)
+        user_doc = user_doc_ref.get()
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            if 'predictions' in user_data:
+                user_data['predictions'].append(new_prediction)
+            else:
+                user_data['predictions'] = [new_prediction]
+        else:
+            user_data = {'predictions': [new_prediction]}
+
+        user_doc_ref.set(user_data)
+
+        response = {
+            'message': 'Prediction saved successfully.',
+            'prediction': new_prediction
+        }
 
         return JSONResponse(content=response, status_code=200)
-    
+
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-# Endpoint to get prediction history
+# Endpoint to get prediction history for the authenticated user
 @app.get("/gethistory")
-def get_history():
-    return JSONResponse(content={"history": prediction_history}, status_code=200)
+async def get_history(request: Request):
+    try:
+    
+        jwt = request.headers.get('Authorization')
+        if not jwt:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token missing")
+
+        user = auth.verify_id_token(jwt)
+        user_id = user['user_id']
+
+    
+        user_doc_ref = db.collection('user_prediction_history').document(user_id)
+        doc = user_doc_ref.get()
+        if doc.exists:
+            history = doc.to_dict().get('predictions', [])
+            response = {
+                'message': 'History retrieved successfully.',
+                'history': history
+            }
+            return JSONResponse(content=response, status_code=200)
+        else:
+            response = {
+                'message': 'No history found.',
+                'history': []
+            }
+            return JSONResponse(content=response, status_code=200)  # Return empty history if not found
+
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host='0.0.0.0', port=8080)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

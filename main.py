@@ -153,6 +153,43 @@ async def predict_image(request: Request, photo: UploadFile = File(...)):
         raise http_err
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+
+#Endpoint for predict without auth
+@app.post("/predict_image_anon")
+async def predict_image(request: Request, photo: UploadFile = File(...)):
+    try:
+        if photo.content_type not in ["image/jpeg", "image/png"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is Not an Image")
+
+        contents = await photo.read()
+        processed_image = process_image(contents)
+        processed_image = np.expand_dims(processed_image, axis=0)
+
+        prediction = model.predict(processed_image)
+
+        predicted_class = np.argmax(prediction)
+        predicted_class_name = class_names[predicted_class]
+        product_details = fetch_product_details(predicted_class_name)
+
+        if not product_details:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product details not found")
+
+        new_prediction = {
+            'tanaman_herbal': product_details,
+            'confidence': float(np.max(prediction)),
+        }
+        response = {
+            'message': 'Prediction saved successfully.',
+            'prediction': new_prediction
+        }
+
+        return JSONResponse(content=response, status_code=200)
+
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 # Endpoint to get prediction history for the authenticated user
 @app.get("/gethistory")
@@ -188,5 +225,7 @@ async def get_history(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8000, reload=True)

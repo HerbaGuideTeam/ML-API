@@ -8,7 +8,8 @@ from io import BytesIO
 from PIL import Image
 from fastapi import FastAPI, Response, UploadFile, File, HTTPException, status, Depends, Request
 from fastapi.responses import JSONResponse
-from google.cloud import firestore, secretmanager
+from google.cloud import firestore, secretmanager, storage
+from google.cloud.storage import Blob
 from connect import create_connection_pool
 from sqlalchemy import text
 from google.oauth2 import service_account
@@ -40,7 +41,16 @@ if not firebase_admin._apps:
 # Initialize Firestore client
 db = firestore.Client()
 
-# Image processing function
+# Initialize Google Cloud Storage client
+storage_client = storage.Client()
+bucket_name = 'c241-ps193-bucket'
+bucket = storage_client.bucket(bucket_name)
+
+def save_image_to_bucket(image_bytes, filename):
+    blob = bucket.blob(f"uploaded_images/{filename}")
+    blob.upload_from_string(image_bytes, content_type="image/jpeg")
+    return blob.public_url
+
 def process_image(image_bytes):
     image = Image.open(BytesIO(image_bytes))
     if image.mode != 'RGB':
@@ -57,7 +67,7 @@ def index():
 def fetch_product_details(nama):
     with pool.connect() as conn:
         sql_statement = text(
-            "SELECT th.nama, th.deskripsi, th.photo_url, pr.penyakit, pr.resep "
+            "SELECT th.nama, th.deskripsi, pr.penyakit, pr.resep "
             "FROM tanaman_herbal th "
             "JOIN penyakit_resep pr ON th.id = pr.tanaman_herbal_id "
             "WHERE th.nama = :nama;"
@@ -66,24 +76,21 @@ def fetch_product_details(nama):
         result = conn.execute(sql_statement)
         query_results = result.fetchall()
 
-    # Handle missing product details
     if not query_results:
         return []
 
     formatted_results = {
         'nama': query_results[0][0],
         'deskripsi': query_results[0][1],
-        'photo_url': query_results[0][2],
         'mengobati_apa': []
     }
 
     for row in query_results:
         formatted_results['mengobati_apa'].append({
-            'penyakit': row[3],
-            'resep': [row[4]] 
+            'penyakit': row[2],
+            'resep': [row[3]] 
         })
 
-  
     penyakit_dict = {}
     for item in formatted_results['mengobati_apa']:
         if item['penyakit'] not in penyakit_dict:
@@ -94,11 +101,11 @@ def fetch_product_details(nama):
 
     return formatted_results
 
+
 # Endpoint for image prediction
 @app.post("/predict_image")
 async def predict_image(request: Request, photo: UploadFile = File(...)):
     try:
-   
         jwt = request.headers.get('Authorization')
         if not jwt:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token missing")
@@ -122,13 +129,16 @@ async def predict_image(request: Request, photo: UploadFile = File(...)):
         if not product_details:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product details not found")
 
+        photo_url = save_image_to_bucket(contents, f"{user_id}_{datetime.utcnow().timestamp()}.jpeg")
+
+        product_details['photo_url'] = photo_url
+
         new_prediction = {
             'tanaman_herbal': product_details,
             'confidence': float(np.max(prediction)),
-            'created_at': datetime.utcnow().isoformat() 
+            'created_at': datetime.utcnow().isoformat(),
         }
 
-   
         user_doc_ref = db.collection('user_prediction_history').document(user_id)
         user_doc = user_doc_ref.get()
         if user_doc.exists:
@@ -153,11 +163,9 @@ async def predict_image(request: Request, photo: UploadFile = File(...)):
         raise http_err
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
-    
 
-#Endpoint for predict without auth
 @app.post("/predict_image_anon")
-async def predict_image(request: Request, photo: UploadFile = File(...)):
+async def predict_image_anon(photo: UploadFile = File(...)):
     try:
         if photo.content_type not in ["image/jpeg", "image/png"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File is Not an Image")
@@ -175,12 +183,17 @@ async def predict_image(request: Request, photo: UploadFile = File(...)):
         if not product_details:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product details not found")
 
+        photo_url = save_image_to_bucket(contents, f"anonymous_{datetime.utcnow().timestamp()}.jpeg")
+
+        product_details['photo_url'] = photo_url
+
         new_prediction = {
             'tanaman_herbal': product_details,
             'confidence': float(np.max(prediction)),
         }
+
         response = {
-            'message': 'Prediction saved successfully.',
+            'message': 'Prediction successful.',
             'prediction': new_prediction
         }
 
@@ -191,11 +204,12 @@ async def predict_image(request: Request, photo: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+
+
 # Endpoint to get prediction history for the authenticated user
 @app.get("/gethistory")
 async def get_history(request: Request):
     try:
-    
         jwt = request.headers.get('Authorization')
         if not jwt:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token missing")
@@ -203,7 +217,6 @@ async def get_history(request: Request):
         user = auth.verify_id_token(jwt)
         user_id = user['user_id']
 
-    
         user_doc_ref = db.collection('user_prediction_history').document(user_id)
         doc = user_doc_ref.get()
         if doc.exists:
@@ -218,14 +231,12 @@ async def get_history(request: Request):
                 'message': 'No history found.',
                 'history': []
             }
-            return JSONResponse(content=response, status_code=200)  # Return empty history if not found
-
+            return JSONResponse(content=response, status_code=200) 
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
-
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8080, reload=True)

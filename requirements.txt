@@ -10,3 +10,4 @@ sqlalchemy
 google-auth
 cloud-sql-python-connector[pymysql]
 pymysql
+google-cloud-storage

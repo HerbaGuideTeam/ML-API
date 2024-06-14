@@ -221,9 +221,10 @@ async def get_history(request: Request):
         doc = user_doc_ref.get()
         if doc.exists:
             history = doc.to_dict().get('predictions', [])
+            sorted_history = sorted(history, key=lambda x: x['created_at'], reverse=True)
             response = {
                 'message': 'History retrieved successfully.',
-                'history': history
+                'history': sorted_history
             }
             return JSONResponse(content=response, status_code=200)
         else:
@@ -231,7 +232,7 @@ async def get_history(request: Request):
                 'message': 'No history found.',
                 'history': []
             }
-            return JSONResponse(content=response, status_code=200) 
+            return JSONResponse(content=response, status_code=200)
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
@@ -239,4 +240,4 @@ async def get_history(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="localhost", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)

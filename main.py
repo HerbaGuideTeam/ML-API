@@ -23,7 +23,7 @@ def access_secret_version(project_id, secret_id, version_id):
     payload = response.payload.data.decode("UTF-8")
     return json.loads(payload)
 
-model = tf.keras.models.load_model('./HerbaGuideRev2.h5')
+model = tf.keras.models.load_model('./bestTFLHerbalGuide.h5')
 
 app = FastAPI(title="ML Try FastAPI")
 
@@ -55,7 +55,7 @@ def process_image(image_bytes):
     image = Image.open(BytesIO(image_bytes))
     if image.mode != 'RGB':
         image = image.convert('RGB')
-    image = image.resize((224, 224))
+    image = image.resize((256, 256))
     image = np.array(image) / 255.0 
     return image
 
@@ -240,4 +240,4 @@ async def get_history(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="localhost", port=8080, reload=True)

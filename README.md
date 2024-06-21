@@ -8,7 +8,6 @@ This repository provides a FastAPI-based API (`main.py`) for a machine learning 
 - [Dependencies](#dependencies)
 - [Installation Instructions](#installation-instructions)
 - [Endpoints](#endpoints)
-- [Developers](#developers)
 
 ## Project Structure
 
@@ -58,6 +57,7 @@ ML-API-main/
     ```sh
     python main.py
     ```
+4. **Configure Database in connect.py**
 
 ### Using Docker
 

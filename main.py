@@ -237,6 +237,39 @@ async def get_history(request: Request):
         raise http_err
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+# Endpoint to search prediction history by plant name
+@app.get("/search_history")
+async def search_history(request: Request, plant_name: str):
+    try:
+        jwt = request.headers.get('Authorization')
+        if not jwt:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token missing")
+
+        user = auth.verify_id_token(jwt)
+        user_id = user['user_id']
+
+        user_doc_ref = db.collection('user_prediction_history').document(user_id)
+        doc = user_doc_ref.get()
+        if doc.exists:
+            history = doc.to_dict().get('predictions', [])
+            filtered_history = [prediction for prediction in history if plant_name.lower() in prediction['tanaman_herbal']['nama'].lower()]
+            sorted_filtered_history = sorted(filtered_history, key=lambda x: x['created_at'], reverse=True)
+            response = {
+                'message': 'Filtered history retrieved successfully.',
+                'history': sorted_filtered_history
+            }
+            return JSONResponse(content=response, status_code=200)
+        else:
+            response = {
+                'message': 'No history found.',
+                'history': []
+            }
+            return JSONResponse(content=response, status_code=200)
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 if __name__ == "__main__":

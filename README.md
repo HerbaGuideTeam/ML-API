@@ -244,7 +244,3 @@ ML-API-main/
   "detail": "Internal Server Error"
 }
 ```
-
-# Developers
-   - [Natanael Edward Agung](https://github.com/natanaeledward)
-   - [Nuriyatus Sholihah](https://github.com/nuriyatussholihah)

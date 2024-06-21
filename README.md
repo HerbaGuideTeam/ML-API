@@ -6,15 +6,27 @@ This repository provides a FastAPI-based API (`main.py`) for a machine learning 
 
 - [Project Structure](#project-structure)
 - [Dependencies](#dependencies)
-- [Setup Instructions](#setup-instructions)
-  - [Environment Setup](#environment-setup)
+- [Installation Instructions](#installation-instructions)
 - [Endpoints](#endpoints)
 - [Developers](#developers)
 
 ## Project Structure
 
-- **main.py**: Contains the FastAPI application with endpoints for image prediction, user authentication, and database operations.
-- **connect.py**: Establishes a connection pool to a MySQL database hosted on Google Cloud SQL using SQLAlchemy and Google Secret Manager.
+```
+ML-API-main/
+├── .dockerignore
+├── .gitattributes
+├── .gitignore
+├── Dockerfile
+├── README.md
+├── bestTFLHerbalGuide.h5
+├── connect.py
+├── main.py
+├── requirements.txt
+└── .vscode/
+    └── setting.json
+```
+
 
 ## Dependencies
 
@@ -29,15 +41,35 @@ This repository provides a FastAPI-based API (`main.py`) for a machine learning 
 - `google-auth`, `google-auth-oauthlib`, `google-auth-httplib2`: Google authentication libraries.
 - `sqlalchemy`, `pymysql`: SQL database connection and operations.
 
-## Setup Instructions
+## installation Instructions
 
-### Environment Setup
+1. **Clone the repository**:
+    ```sh
+    git clone https://github.com/yourusername/ML-API.git
+    cd ML-API
+    ```
 
-Ensure Python 3.7+ is installed.
+2. **Install the required packages**:
+    ```sh
+    pip install -r requirements.txt
+    ```
 
-```bash
-pip install -r requirements.txt
-```
+3. **Run the API**:
+    ```sh
+    python main.py
+    ```
+
+### Using Docker
+
+1. **Build the Docker image**:
+    ```sh
+    docker build -t ml-api .
+    ```
+
+2. **Run the Docker container**:
+    ```sh
+    docker run -p 5000:5000 ml-api
+    ```
 ## Endpoints
 
 ### Predict Image

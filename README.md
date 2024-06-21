@@ -8,13 +8,8 @@ This repository provides a FastAPI-based API (`main.py`) for a machine learning 
 - [Dependencies](#dependencies)
 - [Setup Instructions](#setup-instructions)
   - [Environment Setup](#environment-setup)
-  - [Google Cloud Setup](#google-cloud-setup)
-  - [Database Setup](#database-setup)
-  - [Running the API](#running-the-api)
 - [Endpoints](#endpoints)
-- [Additional Notes](#additional-notes)
-- [Authors](#authors)
-- [License](#license)
+- [Developers](#developers)
 
 ## Project Structure
 
@@ -42,3 +37,182 @@ Ensure Python 3.7+ is installed.
 
 ```bash
 pip install -r requirements.txt
+```
+## Endpoints
+
+### Predict Image
+- **URL:** `/predict_image`
+- **Method:** `POST`
+- **Headers:**
+    - `Authorization`: `Bearer <token>` : use a token from login
+- **Request Body (Form-data):**
+      `photo`: Image file (JPEG or PNG)
+
+#### Responses
+- **Success Response (200 OK):**
+```json
+{
+  "message": "Prediction saved successfully.",
+  "prediction": {
+    "tanaman_herbal": {
+      "nama": "Sereh Dapur",
+      "deskripsi": "Description of Sereh Dapur",
+      "mengobati_apa": [
+        {
+          "penyakit": "Cold",
+          "resep": ["Recipe 1"]
+        }
+      ],
+      "photo_url": "url"
+    },
+    "confidence": 0.95,
+    "created_at": "2024-06-21T12:34:56.789Z"
+  }
+```
+- **Error Response (401 Unauthorized):**
+```json
+{
+  "detail": "Authorization token missing"
+}
+```
+- **Error Response (400 Bad Request):**
+```json
+{
+  "detail": "File is Not an Image"
+}
+```
+- **Error Response (500 Internal Server Error):**
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+### Predict Image Anonymously
+- **URL:** `/predict_image_anon`
+- **Method:** `POST`
+- **Request Body (Form-data):**
+      `photo`: Image file (JPEG or PNG)
+
+#### Responses
+- **Success Response (200 OK):**
+```json
+{
+  "message": "Prediction successful.",
+  "prediction": {
+    "tanaman_herbal": {
+      "nama": "Sereh Dapur",
+      "deskripsi": "Description of Sereh Dapur",
+      "mengobati_apa": [
+        {
+          "penyakit": "Cold",
+          "resep": ["Recipe 1"]
+        }
+      ],
+      "photo_url": "url"
+    },
+    "confidence": 0.95,
+  }
+```
+- **Error Response (400 Bad Request):**
+```json
+{
+  "detail": "File is Not an Image"
+}
+```
+- **Error Response (500 Internal Server Error):**
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+### Get Prediction History
+- **URL:** `/gethistory`
+- **Method:** `GET`
+- **Headers:**
+    - `Authorization`: `Bearer <token>` : use a token from login
+
+#### Responses
+- **Success Response (200 OK):**
+```json
+{
+  "message": "History retrieved successfully.",
+  "history": [
+    {
+      "tanaman_herbal": {
+        "nama": "Sereh Dapur",
+        "deskripsi": "Description of Sereh Dapur",
+        "mengobati_apa": [
+          {
+            "penyakit": "Cold",
+            "resep": ["Recipe 1"]
+          }
+        ],
+        "photo_url": "url"
+      },
+      "confidence": 0.95,
+      "created_at": "2024-06-21T12:34:56.789Z"
+    }
+  ]
+}
+```
+- **Error Response (401 Unauthorized):**
+```json
+{
+  "detail": "Authorization token missing"
+}
+```
+- **Error Response (500 Internal Server Error):**
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+### Search Prediction History
+- **URL:** `/search_history?plant_name=<PLANT NAME>`
+- **Method:** `GET`
+- **Headers:**
+    - `Authorization`: `Bearer <token>` : use a token from login
+
+#### Responses
+- **Success Response (200 OK):**
+```json
+{
+  "message": "Filtered history retrieved successfully.",
+  "history": [
+    {
+      "tanaman_herbal": {
+        "nama": "Sereh Dapur",
+        "deskripsi": "Description of Sereh Dapur",
+        "mengobati_apa": [
+          {
+            "penyakit": "Cold",
+            "resep": ["Recipe 1"]
+          }
+        ],
+        "photo_url": "url"
+      },
+      "confidence": 0.95,
+      "created_at": "2024-06-21T12:34:56.789Z"
+    }
+  ]
+}
+```
+- **Error Response (401 Unauthorized):**
+```json
+{
+  "detail": "Authorization token missing"
+}
+```
+- **Error Response (500 Internal Server Error):**
+```json
+{
+  "detail": "Internal Server Error"
+}
+```
+
+# Developers
+   - [Natanael Edward Agung](https://github.com/natanaeledward)
+   - [Nuriyatus Sholihah](https://github.com/nuriyatussholihah)
